@@ -17,7 +17,7 @@
  */
 import type { ProblemInput, ReachSets, SolveResult, SolveSolution } from "./types";
 
-const LOG = 8; // 2^7 = 128 >= Kmax(80)
+const LOG = 8; // 倍增层数；最大跳长 2^(LOG-1)=128 >= Kmax(80)
 
 interface Stage {
   index: number;
@@ -32,6 +32,14 @@ interface Stage {
   parentEnd: Int32Array;
   parentLocal: Int32Array;
   up: Int32Array[];
+  /**
+   * 交错向量 T(s)=(e0,c1,e1,c2,...,e_{d-1},c_d) 的 trie 节点 id：
+   * tid 相同当且仅当两条前缀路径的完整交错分量序列相同。
+   * 注意状态同一性比向量相等更细：同深度的两个状态可以仅因自身结束
+   * 下标 e_d 不同而不同（e_d 不属于深度 d 的向量，而在深度 d+1 才入场），
+   * 故倍增裁决必须按 tid 判同，不能直接比较状态下标。
+   */
+  tid: Int32Array;
 }
 
 const absBI = (x: bigint): bigint => (x < 0n ? -x : x);
@@ -106,9 +114,31 @@ export function solve(input: ProblemInput): SolveResult {
       parentEnd: new Int32Array(size),
       parentLocal: new Int32Array(size),
       up: [],
+      tid: new Int32Array(size).fill(-1),
     };
     stages[i] = stage;
     return stage;
+  };
+
+  // ---- 交错向量 trie：深度 0 的空向量统一为根节点 0 ----
+  // 单个整数承载边键：父节点 id * TRIE_M + (token + TRIE_BIAS)。
+  // 界内 token = 父结束下标 ∈ [0, N-1](<600) 或补偿 ∈ [-D, D](⊂[-8,8])，
+  // 故 TRIE_M=1024 足够；节点总数 ≤ K·N·(2D+1) ≤ 80·600·17 = 816000，
+  // 边键 < 2^30，始终为安全整数。
+  const TRIE_M = 1024;
+  const TRIE_BIAS = 512;
+  let trieSeq = 0;
+  const trieRoot = trieSeq++;
+  const trieNext = new Map<number, number>();
+  /** 在父向量节点 parentTid 后追加一个交错分量（end 或补偿），返回子节点 id */
+  const trieChild = (parentTid: number, token: number): number => {
+    const key = parentTid * TRIE_M + (token + TRIE_BIAS);
+    let id = trieNext.get(key);
+    if (id === undefined) {
+      id = trieSeq++;
+      trieNext.set(key, id);
+    }
+    return id;
   };
 
   // ---- Stage 0：补偿固定为 0（cidx = D） ----
@@ -121,11 +151,16 @@ export function solve(input: ProblemInput): SolveResult {
     s0.end[idx] = e;
     s0.parentEnd[idx] = -1;
     s0.parentLocal[idx] = -1;
+    s0.tid[idx] = trieRoot; // T = ()（e_0 尚未入场）
   }
 
   /** 同一层两个状态的交错向量字典序比较（向量相同返回 0） */
   const cmpVector = (depth0: number, x: number, y: number): number => {
     if (x === y) return 0;
+    const st0 = stages[depth0];
+    // 状态下标不同不代表向量不同：同深度状态可能仅自身结束下标不同，
+    // 而该下标尚未进入本层向量。以 trie 节点判定完整前缀是否相等。
+    if (st0.tid[x] === st0.tid[y]) return 0;
     let a = x;
     let b = y;
     let depth = depth0;
@@ -135,10 +170,13 @@ export function solve(input: ProblemInput): SolveResult {
         const st = stages[depth];
         const aa = st.up[k][a];
         const bb = st.up[k][b];
-        if (aa >= 0 && aa !== bb) {
+        const upDepth = depth - (1 << k);
+        // 只有上跳落点处的前缀 trie 节点仍不同，才说明首个分歧不浅于落点；
+        // 状态下标不同但 tid 相同时必须留在当前层继续找分歧。
+        if (aa >= 0 && bb >= 0 && stages[upDepth].tid[aa] !== stages[upDepth].tid[bb]) {
           a = aa;
           b = bb;
-          depth -= 1 << k;
+          depth = upDepth;
         }
       }
     }
@@ -251,6 +289,8 @@ export function solve(input: ProblemInput): SolveResult {
           cur.end[idx] = e;
           cur.parentEnd[idx] = best.p;
           cur.parentLocal[idx] = pidx;
+          // 向量 = 父向量后追加 (e_{i-1}=父结束下标, c_i)
+          cur.tid[idx] = trieChild(trieChild(prev.tid[pidx] as number, best.p), c);
         }
       }
     }

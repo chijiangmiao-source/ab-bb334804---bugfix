@@ -18,10 +18,10 @@ services:
       timeout: 3s
       retries: 3
 
-  # 一次性验收服务：单元测试 + 构建检查 + HTTP 冒烟。
+  # 一次性验收服务：单元测试 + 规范裁决回归 + 构建检查 + HTTP 冒烟。
   # 用法：
   #   docker compose run --rm verify
-  # 自行退出并以退出码报告：0 全通过；10 单测失败；20 构建失败；30 冒烟失败。
+  # 自行退出并以退出码报告：0 全通过；1 规范裁决回归失败；10 单测失败；20 构建失败；30 冒烟失败。
   verify:
     profiles: ["verify"]
     build:

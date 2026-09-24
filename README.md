@@ -86,9 +86,9 @@ docker compose run --build --rm verify
 echo $?
 ```
 
-依次执行：单元测试 → 构建检查（tsc + vite build）→ 对运行中的 web 服务做 HTTP 冒烟（`/healthz` 200 `ok`、首页含 root 节点与 module 入口）。
+依次执行：单元测试 → 规范裁决回归（同优边界场景，报告 `CANONICAL_OK`）→ 构建检查（tsc + vite build）→ 对运行中的 web 服务做 HTTP 冒烟（`/healthz` 200 `ok`、首页含 root 节点与 module 入口）。
 
-退出码：`0` 全部通过；`10` 单元测试失败；`20` 构建检查失败；`30` HTTP 冒烟失败。
+退出码：`0` 全部通过；`1` 规范裁决回归失败（报告 `CANONICAL_MISMATCH`）；`10` 单元测试失败；`20` 构建检查失败；`30` HTTP 冒烟失败。
 
 ## 6. 目录结构
 
