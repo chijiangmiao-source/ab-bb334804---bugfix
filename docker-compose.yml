@@ -1,0 +1,36 @@
+# 纳米孔分段校准复核台 —— 纯浏览器端静态 Web
+# 全部计算在浏览器 Web Worker 中完成，无后端、无在线服务调用。
+
+services:
+  web:
+    build:
+      context: .
+      target: web
+    image: nanopore-review-web:latest
+    container_name: nanopore-review-web
+    ports:
+      # 宿主机端口可通过环境变量 WEB_PORT 配置（默认 8080）
+      - "${WEB_PORT:-8080}:80"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/healthz"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+
+  # 一次性验收服务：单元测试 + 构建检查 + HTTP 冒烟。
+  # 用法：
+  #   docker compose run --rm verify
+  # 自行退出并以退出码报告：0 全通过；10 单测失败；20 构建失败；30 冒烟失败。
+  verify:
+    profiles: ["verify"]
+    build:
+      context: .
+      target: verify
+    image: nanopore-review-verify:latest
+    environment:
+      BASE_URL: "http://web:80"
+    depends_on:
+      web:
+        condition: service_healthy
+    restart: "no"
