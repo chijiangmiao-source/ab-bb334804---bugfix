@@ -123,13 +123,21 @@ export function solve(input: ProblemInput): SolveResult {
     s0.parentLocal[idx] = -1;
   }
 
-  /** 同一层两个状态的交错向量字典序比较（向量相同返回 0） */
+  /**
+   * 同一层两个状态的交错向量字典序比较（向量相同返回 0）。
+   *
+   * 注意：第 depth 层状态的向量为 (e0,c1,…,e_{depth-1},c_depth)，
+   * 状态自身的结束位置 e_depth 尚不在其中——它作为下一段转移写入的
+   * 首个交错分量（parentEnd）参与比较。因此两个不同状态可能持有完全
+   * 相同的向量（仅 e_depth 不同），倍增只能按「状态链首个分歧的最浅层」
+   * 落点，再按下一层分量补判 e_depth。
+   */
   const cmpVector = (depth0: number, x: number, y: number): number => {
     if (x === y) return 0;
     let a = x;
     let b = y;
     let depth = depth0;
-    // 倍增上跳到二者仍不同的最浅层（至少停在第 1 层，以便比较 e_0）
+    // 倍增上跳到状态链首个分歧所在的最浅层（至少停在第 1 层，以便比较 e_0）
     for (let k = LOG - 1; k >= 0; k--) {
       if ((1 << k) <= depth - 1) {
         const st = stages[depth];
@@ -142,11 +150,18 @@ export function solve(input: ProblemInput): SolveResult {
         }
       }
     }
-    // a、b 此刻是首个分歧所在的最浅层状态：先比追加的边界 e_{d-1}，再比补偿 c_d
+    // a、b 此刻位于最浅层的相异状态：先比该段转移写入的父结束位置
+    // e_{depth-1}，再比本层补偿 c_depth
     const st = stages[depth];
     const pe = st.parentEnd[a] - st.parentEnd[b];
     if (pe !== 0) return pe;
-    return (a % C) - (b % C);
+    const pc = (a % C) - (b % C);
+    if (pc !== 0) return pc;
+    // 父链与 c_depth 全同：两状态仅自身结束位置 e_depth 不同。
+    // e_depth 是下一段转移的首个交错分量；若已在被比较的最深层，
+    // 则两条向量确实相同（由调用方以父结束位置收束平局）。
+    if (depth >= depth0) return 0;
+    return st.end[a] - st.end[b];
   };
 
   // ---- Stages 1..K-1 ----

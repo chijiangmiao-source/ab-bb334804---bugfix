@@ -92,6 +92,50 @@ describe("parseDraft 校验与首因", () => {
   });
 });
 
+describe("solve 前两级同优时的规范裁决", () => {
+  // 业务回归例：7 样本 [2,-4,-4,0,3,1,-4]，3 个符号目标电平 [-2,0,0]，
+  // 驻留 1..4，D=2。存在两条前两级完全同优的完整方案：
+  //   路径 A（旧实现误高亮）：ends=[2,5,6], comps=[0,0,-1]
+  //   路径 B（规范解）      ：ends=[2,3,6], comps=[0,0,1]
+  // 二者 E*=15、V*=1；交错向量首个分歧在 e_1（3<5），路径 B 必须胜出。
+  const input = makeInput([2, -4, -4, 0, 3, 1, -4], [-2, 0, 0], 1, 4, 2);
+
+  it("同优边界下选中更早内部边界的规范路径（CANONICAL_OK）", () => {
+    const r = solve(input);
+    expect(r.feasible).toBe(true);
+    const s = r.solution!;
+
+    // 两级目标值：总绝对误差 15、补偿变化总量 1（不能只核对代价）
+    expect(s.totalError).toBe("15");
+    expect(s.totalVariation).toBe(1);
+
+    // 完整规范路径：结束位置 [2,3,6]、补偿 [0,0,1]
+    expect(s.ends).toEqual([2, 3, 6]);
+    expect(s.comps).toEqual([0, 0, 1]);
+    expect(s.starts).toEqual([0, 3, 4]);
+    // 交错向量 (e0,c1,e1,c2) 逐分量核对
+    expect([s.ends[0], s.comps[1], s.ends[1], s.comps[2]]).toEqual([2, 0, 3, 1]);
+
+    // 这确实是一个前两级同优场景：两个 e_1（3 与 5）、两个 c_2（-1 与 1）均可达，共 2 个方案
+    expect(r.reach!.boundarySets).toEqual([[2], [3, 5], []]);
+    expect(r.reach!.compSets).toEqual([[0], [0], [-1, 1]]);
+    expect(r.reach!.optimalCount).toBe("2");
+
+    // 与穷举参照的规范裁决完全一致
+    const ref = bruteForce(input);
+    expect(s.ends).toEqual(ref.solution!.ends);
+    expect(s.comps).toEqual(ref.solution!.comps);
+    expect(s.totalError).toBe(ref.solution!.totalError);
+    expect(s.totalVariation).toBe(ref.solution!.totalVariation);
+    expect(r.reach!.boundarySets).toEqual(ref.reach!.boundarySets);
+    expect(r.reach!.compSets).toEqual(ref.reach!.compSets);
+    expect(r.reach!.optimalCount).toBe(ref.reach!.optimalCount);
+
+    // eslint-disable-next-line no-console
+    console.log("CANONICAL_OK");
+  });
+});
+
 describe("solve 基本性质", () => {
   it("默认例：c0=0、相邻补偿差 ≤1、驻留约束成立", () => {
     const input = parseDraft(DEFAULT_DRAFT).input!;
